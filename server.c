@@ -39,15 +39,15 @@ int main(int argc, char** argv)
 
     // create RxRCP service
     const struct sockaddr_rxrpc srx = {
-		.srx_family	= AF_RXRPC,
-		.srx_service = VL_SERVICE_ID, /* RxRPC service ID */
+        .srx_family	= AF_RXRPC,
+        .srx_service = VL_SERVICE_ID, /* RxRPC service ID */
         .transport_len = sizeof(struct sockaddr_in),
-		.transport_type	= SOCK_DGRAM, /* type of transport socket */
-		.transport.sin.sin_family = AF_INET,
+        .transport_type	= SOCK_DGRAM, /* type of transport socket */
+        .transport.sin.sin_family = AF_INET,
         .transport.sin.sin_port	= htons(7000), /* AFS callback */
         .transport.sin.sin_addr	= { 0 } /* all local interfaces */
-	};
-	if (0 > bind(server,
+    };
+    if (0 > bind(server,
         (const struct sockaddr*) &srx, sizeof(struct sockaddr_rxrpc))) {
             ret = errno;
             perror("Failed to bind server socket");
