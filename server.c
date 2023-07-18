@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <signal.h>
 
-#include "rxrpc.h"
+#include "server.h"
 
 static bool should_stop = false;
 
@@ -26,14 +26,14 @@ int main(int argc, char** argv)
     int ret = 0;
     if (SIG_ERR == signal(SIGINT, server_stop)) {
         ret = errno;
-        perror("Unable to redefine SIGINT handler");
+        perror("Failed to redefine SIGINT handler");
         return ret;
     }
 
     int server = -1;
     if ((server = socket(AF_RXRPC, SOCK_DGRAM, PF_INET)) < 0) {
         ret = errno;
-        perror("Unable to create server socket");
+        perror("Failed to create server socket");
         return ret;
     }
 
@@ -50,16 +50,53 @@ int main(int argc, char** argv)
 	if (0 > bind(server,
         (const struct sockaddr*) &srx, sizeof(struct sockaddr_rxrpc))) {
             ret = errno;
-            perror("Unable to bind server socket");
+            perror("Failed to bind server socket");
             goto out;
     }
     if (0 > listen(server, LISTEN_BACKLOG)) {
         ret = errno;
-        perror("Unable to listen with " XSTR(LISTEN_BACKLOG) " backlog");
+        perror("Failed to listen with " XSTR(LISTEN_BACKLOG) " backlog");
         goto out;
     }
 
+    // structs
+    ssize_t tx_ret = 0, rx_ret = 0;
+    struct rxrpc_structs
+        rx = {0},
+        tx = {0};
+
+    // receive RXRPC_NEW_CALL
+    rx.msg.msg_name = rx.data.name;
+    rx.msg.msg_namelen = sizeof(rx.data.name);
+    rx.msg.msg_iov = &rx.iov;
+    rx.msg.msg_iovlen = 1;
+    rx.msg.msg_control = rx.data.control;
+    rx.msg.msg_controllen = sizeof(rx.data.control);
+    rx_ret = recvmsg(server, &rx.msg, 0);
+    if (0 > rx_ret) {
+        ret = errno;
+        perror("Failed to receive RXRPC_NEW_CALL");
+        goto out;
+    }
+    fprintf(stderr, "RXRPC_NEW_CALL(%zu): received\n", rx_ret);
+
+    // send RXRPC_USER_CALL_ID + RXRPC_ACCEPT
+    tx.msg.msg_control = tx.data.control;
+    tx.msg.msg_controllen = 0;
+    tx.msg.msg_controllen = rxrpc_add_accept(
+        (struct cmsghdr*) tx.data.control, tx.msg.msg_controllen);
+    tx.msg.msg_controllen = rxrpc_add_user_call_id(
+        (struct cmsghdr*) tx.data.control, tx.msg.msg_controllen, USER_ID);
+    tx_ret = sendmsg(server, &tx.msg, 0);
+    if (0 > tx_ret) {
+        ret = errno;
+        perror("Failed to send RXRPC_ACCEPT + RXRPC_USER_CALL_ID");
+        goto out;
+    }
+    fprintf(stderr, "RXRPC_ACCEPT + RXRPC_USER_CALL_ID(%zu): sent\n", tx_ret);
+
     while (!should_stop) {
+        sleep(10);
     }
 
 out:
